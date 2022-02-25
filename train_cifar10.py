@@ -20,7 +20,6 @@ import torchvision.transforms as transforms
 
 import os
 import argparse
-import pandas as pd
 import csv
 import time
 
@@ -48,17 +47,10 @@ parser.add_argument('--cos', action='store_false', help='Train with cosine annea
 args = parser.parse_args()
 
 # take in args
-import wandb
 watermark = "{}_lr{}".format(args.net, args.lr)
 if args.amp:
     watermark += "_useamp"
 
-wandb.init(project="cifar10-challange",
-           name=watermark)
-wandb.config.update(args)
-
-if args.aug:
-    import albumentations
 bs = int(args.bs)
 
 use_amp = args.amp
@@ -89,7 +81,7 @@ transform_test = transforms.Compose([
 
 # Add RandAugment with N, M(hyperparameter)
 if args.aug:  
-    N = 2; M = 14;
+    N = 2; M = 14
     transform_train.transforms.insert(0, RandAugment(N, M))
 
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
@@ -162,11 +154,6 @@ if not args.cos:
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, verbose=True, min_lr=1e-3*1e-5, factor=0.1)
 else:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs)
-
-if args.cos:
-    wandb.config.scheduler = "cosine"
-else:
-    wandb.config.scheduler = "ReduceLROnPlateau"
 
 ##### Training
 scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
@@ -243,7 +230,6 @@ def test(epoch):
 list_loss = []
 list_acc = []
 
-wandb.watch(net)
 for epoch in range(start_epoch, args.n_epochs):
     start = time.time()
     trainloss = train(epoch)
@@ -254,10 +240,6 @@ for epoch in range(start_epoch, args.n_epochs):
     
     list_loss.append(val_loss)
     list_acc.append(acc)
-    
-    # Log training..
-    wandb.log({'epoch': epoch, 'train_loss': trainloss, 'val_loss': val_loss, "val_acc": acc, "lr": optimizer.param_groups[0]["lr"],
-        "epoch_time": time.time()-start})
 
     # Write out csv..
     with open(f'log/log_{args.net}_patch{args.patch}.csv', 'w') as f:
@@ -265,7 +247,3 @@ for epoch in range(start_epoch, args.n_epochs):
         writer.writerow(list_loss) 
         writer.writerow(list_acc) 
     print(list_loss)
-
-# writeout wandb
-wandb.save("wandb_{}.h5".format(args.net))
-    
