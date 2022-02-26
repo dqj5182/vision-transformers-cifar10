@@ -1,12 +1,4 @@
-# -*- coding: utf-8 -*-
-'''
-
-Train CIFAR10 with PyTorch and Vision Transformers!
-written by @kentaroy47, @arutema47
-
-'''
-
-from __future__ import print_function
+ from __future__ import print_function
 
 import torch
 import torch.nn as nn
@@ -23,10 +15,7 @@ import argparse
 import csv
 import time
 
-from models import *
-from models.vit import ViT
 from utils import progress_bar
-from models.convmixer import ConvMixer
 from randomaug import RandAugment
 
 # parsers
@@ -38,7 +27,7 @@ parser.add_argument('--aug', action='store_true', help='use randomaug')
 parser.add_argument('--amp', action='store_true', help='enable AMP training')
 parser.add_argument('--mixup', action='store_true', help='add mixup augumentations')
 parser.add_argument('--net', default='vit')
-parser.add_argument('--bs', default='2')
+parser.add_argument('--bs', default='4')
 parser.add_argument('--n_epochs', type=int, default='50')
 parser.add_argument('--patch', default='4', type=int)
 parser.add_argument('--convkernel', default='8', type=int)
@@ -68,8 +57,6 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 print('==> Preparing data..')
 if args.net=="vit_timm":
     size = 384
-else:
-    size = 32
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
     transforms.Resize(size),
