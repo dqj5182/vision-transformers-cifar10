@@ -5,123 +5,69 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 
-import torchvision
-import torchvision.transforms as transforms
-
+import timm
 import os
 import argparse
 import csv
 import time
 
-from utils import progress_bar
-from randomaug import RandAugment
+from utils.utils import progress_bar
+from dataset.load_cifar import load_cifar
 
 # parsers
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-parser.add_argument('--lr', default=1e-4, type=float, help='learning rate') # resnets.. 1e-3, Vit..1e-4?
+parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
 parser.add_argument('--opt', default="adam")
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--aug', action='store_true', help='use randomaug')
 parser.add_argument('--amp', action='store_true', help='enable AMP training')
 parser.add_argument('--mixup', action='store_true', help='add mixup augumentations')
 parser.add_argument('--net', default='vit_timm')
-parser.add_argument('--bs', default='4')
+parser.add_argument('--bs', default='4', type=int)
 parser.add_argument('--n_epochs', type=int, default='50')
 parser.add_argument('--patch', default='4', type=int)
 parser.add_argument('--convkernel', default='8', type=int)
 parser.add_argument('--cos', action='store_false', help='Train with cosine annealing scheduling')
-
 args = parser.parse_args()
 
+# To prevent CUDA out of memory
 import gc
 gc.collect()
 torch.cuda.empty_cache()
 
 # take in args
 watermark = "{}_lr{}".format(args.net, args.lr)
-if args.amp:
-    watermark += "_useamp"
-
-bs = int(args.bs)
-
-use_amp = args.amp
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 # Data
 print('==> Preparing data..')
-if args.net=="vit_timm":
-    size = 384
 
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.Resize(size),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+args.size = 384
 
-transform_test = transforms.Compose([
-    transforms.Resize(size),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
-
-# Add RandAugment with N, M(hyperparameter)
-if args.aug:  
-    N = 2; M = 14
-    transform_train.transforms.insert(0, RandAugment(N, M))
-
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=bs, shuffle=True, num_workers=8)
-
-testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=8)
+# Get CIFAR-10 dataset
+trainset, testset, trainloader, testloader = load_cifar(args)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 # Model
 print('==> Building model..')
+net = timm.create_model("vit_large_patch16_384", pretrained=True)
+net.head = nn.Linear(net.head.in_features, 10)
+net = torch.nn.DataParallel(net.to(device))
 
-if args.net=="vit_timm":
-    import timm
-    net = timm.create_model("vit_large_patch16_384", pretrained=True)
-    net.head = nn.Linear(net.head.in_features, 10)
-
-net = net.to(device)
-
-if device == 'cuda':
-    net = torch.nn.DataParallel(net) # make parallel
-    cudnn.benchmark = True
-
-if args.resume:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/{}-ckpt.t7'.format(args.net))
-    net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
+cudnn.benchmark = True
 
 # Loss is CE
 criterion = nn.CrossEntropyLoss()
-
-if args.opt == "adam":
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
-elif args.opt == "sgd":
-    optimizer = optim.SGD(net.parameters(), lr=args.lr)  
-    
-# use cosine or reduce LR on Plateau scheduling
-if not args.cos:
-    from torch.optim import lr_scheduler
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, verbose=True, min_lr=1e-3*1e-5, factor=0.1)
-else:
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs)
+optimizer = optim.Adam(net.parameters(), lr=args.lr)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs)
 
 ##### Training
-scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
 def train(epoch):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -131,7 +77,7 @@ def train(epoch):
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         # Train with amp
-        with torch.cuda.amp.autocast(enabled=use_amp):
+        with torch.cuda.amp.autocast(enabled=args.amp):
             outputs = net(inputs)
             loss = criterion(outputs, targets)
         scaler.scale(loss).backward()
