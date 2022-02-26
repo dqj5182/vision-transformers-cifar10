@@ -38,13 +38,18 @@ parser.add_argument('--aug', action='store_true', help='use randomaug')
 parser.add_argument('--amp', action='store_true', help='enable AMP training')
 parser.add_argument('--mixup', action='store_true', help='add mixup augumentations')
 parser.add_argument('--net', default='vit')
-parser.add_argument('--bs', default='256')
+parser.add_argument('--bs', default='2')
 parser.add_argument('--n_epochs', type=int, default='50')
 parser.add_argument('--patch', default='4', type=int)
 parser.add_argument('--convkernel', default='8', type=int)
 parser.add_argument('--cos', action='store_false', help='Train with cosine annealing scheduling')
 
 args = parser.parse_args()
+
+import gc
+gc.collect()
+torch.cuda.empty_cache()
+
 
 # take in args
 watermark = "{}_lr{}".format(args.net, args.lr)
@@ -95,38 +100,13 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-if args.net=='res18':
-    net = ResNet18()
-elif args.net=='vgg':
-    net = VGG('VGG19')
-elif args.net=='res34':
-    net = ResNet34()
-elif args.net=='res50':
-    net = ResNet50()
-elif args.net=='res101':
-    net = ResNet101()
-elif args.net=="convmixer":
-    # from paper, accuracy >96%. you can tune the depth and dim to scale accuracy and speed.
-    net = ConvMixer(256, 16, kernel_size=args.convkernel, patch_size=1, n_classes=10)
-elif args.net=="vit":
-    # ViT for cifar10
-    net = ViT(
-    image_size = 32,
-    patch_size = args.patch,
-    num_classes = 10,
-    dim = 512,
-    depth = 6,
-    heads = 8,
-    mlp_dim = 512,
-    dropout = 0.1,
-    emb_dropout = 0.1
-)
-elif args.net=="vit_timm":
+if args.net=="vit_timm":
     import timm
     net = timm.create_model("vit_large_patch16_384", pretrained=True)
     net.head = nn.Linear(net.head.in_features, 10)
 
 net = net.to(device)
+
 if device == 'cuda':
     net = torch.nn.DataParallel(net) # make parallel
     cudnn.benchmark = True
@@ -174,10 +154,10 @@ def train(epoch):
         scaler.update()
         optimizer.zero_grad()
 
-        train_loss += loss.item()
+        train_loss += float(loss.item())
         _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+        total += float(targets.size(0))
+        correct += float(predicted.eq(targets).sum().item())
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -196,10 +176,10 @@ def test(epoch):
             outputs = net(inputs)
             loss = criterion(outputs, targets)
 
-            test_loss += loss.item()
+            test_loss += float(loss.item())
             _, predicted = outputs.max(1)
-            total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            total += float(targets.size(0))
+            correct += float(predicted.eq(targets).sum().item())
 
             progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
