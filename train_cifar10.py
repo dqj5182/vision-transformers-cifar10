@@ -128,6 +128,9 @@ def test(epoch):
               "scaler": scaler.state_dict()}
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
+        # Save only model state_dict in pth file
+        torch.save(net.state_dict(), 'vit_timm_saved_model.pth')
+        # Save entire state_dict (model, optimizer, scalar in t7 file)
         torch.save(state, './checkpoint/'+args.net+'-{}-ckpt.t7'.format(args.patch))
         best_acc = acc
     
