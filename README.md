@@ -7,7 +7,7 @@ I use pytorch for implementation.
 
 
 # Usage
-`python train_cifar10.py --net vit_timm --lr 1e-4` # train with pretrained vit
+`python train_cifar10.py --net vit_timm --lr 1e-4 --label-smoothing` # train with pretrained vit
 
 # Results..
 
