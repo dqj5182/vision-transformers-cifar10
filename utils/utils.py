@@ -8,6 +8,7 @@ import sys
 import time
 import math
 
+import torch
 import torch.nn as nn
 import torch.nn.init as init
 
@@ -131,7 +132,7 @@ def format_time(seconds):
 def get_criterion(args):
     if args.criterion=="ce":
         if args.label_smoothing:
-            criterion = LabelSmoothingCrossEntropyLoss(args.num_classes, smoothing=args.smoothing)
+            criterion = LabelSmoothingCrossEntropyLoss(10, smoothing=0.1)
         else:
             criterion = nn.CrossEntropyLoss()
     else:
