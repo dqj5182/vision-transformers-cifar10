@@ -11,13 +11,15 @@ import argparse
 import csv
 import time
 
-from utils.utils import progress_bar
+from utils.utils import progress_bar, get_criterion
 from dataset.load_cifar import load_cifar
 
 # parsers
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
 parser.add_argument('--opt', default="adam")
+parser.add_argument("--criterion", default="ce")
+parser.add_argument("--label-smoothing", default="True", action="store_true")
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--aug', action='store_true', help='use randomaug')
 parser.add_argument('--amp', action='store_true', help='enable AMP training')
@@ -62,7 +64,7 @@ net = torch.nn.DataParallel(net.to(device))
 cudnn.benchmark = True
 
 # Loss is CE
-criterion = nn.CrossEntropyLoss()
+criterion = get_criterion(args)
 optimizer = optim.Adam(net.parameters(), lr=args.lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs)
 
